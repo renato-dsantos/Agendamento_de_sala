@@ -1,0 +1,4 @@
+{ "name": "agendamento-salas", "version": "0.1.0", "private": true,
+  "description": "Agendamento de salas (Node puro, sem dependências)",
+  "scripts": { "start": "node server.js", "test": "node test.js && node test-white.js", "test:black": "node test.js", "test:white": "node test-white.js" },
+  "engines": { "node": ">=22.13" } }

@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Agendamento de salas</title>
+<style>
+:root{--bg:#f3f5f9;--fg:#1b2333;--mu:#667085;--card:#fff;--ac:#2557d6;--ac2:#e8eefc;--bd:#e0e5ee;--er:#b42318;--ok:#17803d;--wa:#b45309;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#12151b;--fg:#e8ebf0;--mu:#98a2b3;--card:#1c2129;--ac:#6b93ff;--ac2:#232d4a;--bd:#2d3542;--er:#ff8a80;--ok:#5ad08a;--wa:#fbbf5a;color-scheme:dark}}
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--fg)}
+.wrap{max-width:1000px;margin:0 auto;padding:0 16px}
+header{background:var(--card);border-bottom:1px solid var(--bd);position:sticky;top:0;z-index:5}
+header .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;height:56px}
+.brand{font-weight:700;font-size:17px;display:flex;align-items:center;gap:8px}.brand i{width:12px;height:12px;border-radius:4px;background:var(--ac)}
+.user{display:flex;align-items:center;gap:10px;font-size:14px}.user small{color:var(--mu)}
+main{padding:20px 16px 60px}
+nav{display:flex;gap:4px;overflow-x:auto;border-bottom:1px solid var(--bd);margin-bottom:18px}
+nav button{background:none;border:0;border-bottom:3px solid transparent;border-radius:0;color:var(--mu);padding:10px 14px;white-space:nowrap;font-weight:600}
+nav button.on{color:var(--ac);border-color:var(--ac)}
+button,input,select,textarea{font:inherit;padding:9px 12px;border:1px solid var(--bd);border-radius:8px;background:var(--card);color:var(--fg)}
+button{cursor:pointer;background:var(--ac);color:#fff;border-color:var(--ac);font-weight:600}button.sec{background:var(--card);color:var(--fg);border-color:var(--bd)}button.sm{padding:5px 10px;font-size:13px}
+button:disabled{opacity:.5;cursor:not-allowed}input:focus,select:focus,button:focus-visible{outline:2px solid var(--ac);outline-offset:1px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:16px}
+.filtro{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin-bottom:18px}
+label{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mu);font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:14px}
+.sala{display:flex;flex-direction:column;gap:6px}.sala h3{margin:0;font-size:17px}.sala .loc{color:var(--mu);font-size:14px}.sala .acoes{margin-top:auto;padding-top:10px}
+.tag{display:inline-block;font-size:12px;padding:2px 9px;border-radius:99px;background:var(--ac2);color:var(--ac);font-weight:600}
+.st{display:inline-block;font-size:12px;padding:2px 9px;border-radius:99px;font-weight:600;border:1px solid currentColor}
+.st.confirmada{color:var(--ok)}.st.pendente{color:var(--wa)}.st.cancelada,.st.rejeitada{color:var(--er)}
+.tbl{overflow-x:auto;padding:4px 8px}table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--bd);font-size:14px}th{color:var(--mu);font-size:12px;text-transform:uppercase;letter-spacing:.04em}tr:last-child td{border:0}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:end}.mu{color:var(--mu);font-size:13px}.vazio{text-align:center;color:var(--mu);padding:30px}
+dialog{border:1px solid var(--bd);border-radius:14px;background:var(--card);color:var(--fg);padding:22px;width:min(440px,92vw)}dialog::backdrop{background:#0008}
+dialog h3{margin:0 0 4px}.f{display:grid;gap:14px;margin-top:14px}.f2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.disp{padding:9px 12px;border-radius:8px;font-size:14px;background:var(--ac2)}.disp.ok{color:var(--ok)}.disp.no{color:var(--er)}
+.bot{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+#msg{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);max-width:92%;padding:11px 16px;border-radius:10px;background:var(--card);border:1px solid var(--bd);box-shadow:0 6px 20px #0003;display:none;z-index:20}
+.er{color:var(--er)}.ok{color:var(--ok)}
+.login{max-width:380px;margin:40px auto}
+</style></head><body>
+<header><div class="wrap"><span class="brand"><i></i>Agendamento de salas</span><span class="user" id="quem"></span></div></header>
+<main class="wrap" id="app"></main>
+<dialog id="dlg"></dialog><div id="msg" role="status"></div>
+<script>
+let tok = '', me = null, aba = 'salas', RES = {};
+const $ = s => document.querySelector(s), val = id => $('#' + id).value;
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const J = o => JSON.stringify(o).replace(/'/g, '&#39;');
+const HORAS = []; for (let h = 7; h <= 22; h++) for (const m of ['00', '30']) if (!(h === 22 && m === '30')) HORAS.push(String(h).padStart(2, '0') + ':' + m);
+const opts = (l, sel) => l.map(x => `<option ${x === sel ? 'selected' : ''}>${x}</option>`).join('');
+const hoje = () => new Date().toLocaleDateString('sv');
+const maisUma = h => HORAS[Math.min(HORAS.indexOf(h) + 2, HORAS.length - 1)];
+const br = d => d.slice(8, 10) + '/' + d.slice(5, 7) + '/' + d.slice(0, 4);
+const periodo = (i, f) => i.slice(0, 10) === f.slice(0, 10) ? `${br(i)} · ${i.slice(11)}–${f.slice(11)}` : `${br(i)} ${i.slice(11)} → ${br(f)} ${f.slice(11)}`;
+const fmt = s => esc(br(s) + ' ' + s.slice(11, 16));
+function aviso(t, erro) { const m = $('#msg'); m.textContent = t; m.className = erro ? 'er' : 'ok'; m.style.display = 'block'; clearTimeout(aviso.t); aviso.t = setTimeout(() => m.style.display = 'none', 4500); }
+async function api(p, m = 'GET', b) {
+  const r = await fetch('/api' + p, { method: m, headers: { 'content-type': 'application/json', ...(tok && { authorization: 'Bearer ' + tok }) }, body: b ? JSON.stringify(b) : undefined });
+  const j = await r.json(); if (!r.ok) { aviso(j.erro, 1); throw new Error(j.erro); } return j;
+}
+function login() {
+  $('#app').innerHTML = `<div class="card login"><h2 style="margin-top:0">Entrar</h2><div class="f">
+  <label>Login<input id="l" value="solicitante"></label><label>Senha<input id="s" type="password" value="123456"></label>
+  <button onclick="entrar()">Entrar</button><p class="mu" style="margin:0">Demonstração (senha 123456): solicitante, responsavel, admin.</p></div></div>`;
+}
+async function entrar() { try { me = await api('/login', 'POST', { login: val('l'), senha: val('s') }); tok = me.token; aba = 'salas'; menu(); } catch {} }
+const NOMES = { solicitante: 'Solicitante', responsavel: 'Responsável', admin: 'Administrador' };
+function menu() {
+  $('#quem').innerHTML = `<span>${esc(me.nome)} <small>· ${NOMES[me.perfil]}</small></span><button class="sec sm" onclick="tok='';me=null;$('#quem').textContent='';login()">Sair</button>`;
+  const abas = [['salas', 'Salas'], ['reservas', 'Reservas'], ['notif', 'Notificações']];
+  if (me.perfil === 'responsavel') abas.push(['aprov', 'Aprovações'], ['rel', 'Relatório']);
+  if (me.perfil === 'admin') abas.push(['admin', 'Administração'], ['rel', 'Relatório'], ['aud', 'Auditoria']);
+  $('#app').innerHTML = `<nav>${abas.map(([k, n]) => `<button class="${k === aba ? 'on' : ''}" onclick="aba='${k}';menu()">${n}</button>`).join('')}</nav><div id="v"></div>`;
+  ({ salas: vSalas, reservas: vReservas, notif: vNotif, aprov: vAprov, rel: vRel, admin: vAdmin, aud: vAud })[aba]();
+}
+/* ---- Salas ---- */
+async function vSalas(buscar) {
+  const g = id => $('#' + id) ? val(id) : '';
+  const f = { l: g('fl'), d: g('fd'), i: g('fi') || '08:00', e: g('fe') || '09:00' };
+  const q = new URLSearchParams(); if (f.l) q.set('localizacao', f.l); if (buscar && f.d) { q.set('de', f.d + 'T' + f.i); q.set('ate', f.d + 'T' + f.e); }
+  const salas = await api('/salas?' + q);
+  $('#v').innerHTML = `<div class="card filtro"><label>Localização<input id="fl" placeholder="Ex.: Bloco A" value="${esc(f.l)}"></label>
+  <label>Data<input id="fd" type="date" min="${hoje()}" value="${f.d}"></label>
+  <label>Das<select id="fi" onchange="ajustaFim('fi','fe')">${opts(HORAS, f.i)}</select></label>
+  <label>Às<select id="fe">${opts(HORAS.filter(h => h > f.i), f.e > f.i ? f.e : maisUma(f.i))}</select></label>
+  <button onclick="vSalas(true)">Buscar salas livres</button></div>` +
+  `<div class="grid">${salas.map(s => `<div class="card sala"><h3>${esc(s.nome)}</h3><span class="loc">${esc(s.localizacao)}</span>
+  <div>${s.restrita ? '<span class="tag">Exige aprovação</span>' : '<span class="tag">Reserva imediata</span>'}${s.ativa ? '' : ' <span class="st cancelada">Desativada</span>'}</div>
+  <div class="acoes"><button onclick='abrir(${J({ sala: s.id, nome: s.nome, restrita: s.restrita, data: f.d, ini: f.i, fim: f.e })})'>Reservar</button></div></div>`).join('') || ''}</div>` +
+  (salas.length ? '' : '<div class="card vazio">Nenhuma sala encontrada para este filtro.</div>');
+}
+function ajustaFim(ii, ie, manter) {
+  const i = val(ii), atual = val(ie), lista = HORAS.filter(h => h > i);
+  $('#' + ie).innerHTML = opts(lista, manter && lista.includes(atual) ? atual : (lista.includes(maisUma(i)) ? maisUma(i) : lista[0]));
+  if (ii === 'mi') checar();
+}
+/* ---- Modal de reserva (nova / alterar) ---- */
+function abrir(p) {
+  const ed = !!p.id, ini = p.ini || '08:00', fim = p.fim > ini ? p.fim : maisUma(ini);
+  $('#dlg').innerHTML = `<h3>${ed ? 'Alterar reserva' : 'Reservar'} — ${esc(p.nome)}</h3>
+  <div class="mu">${p.restrita ? 'Esta sala exige aprovação de um responsável.' : 'Confirmação imediata se estiver livre.'}</div>
+  <div class="f"><label>Data<input id="md" type="date" min="${hoje()}" value="${p.data || hoje()}" onchange="checar()"></label>
+  <div class="f2"><label>Início<select id="mi" onchange="ajustaFim('mi','mf')">${opts(HORAS.slice(0, -1), ini)}</select></label>
+  <label>Término<select id="mf" onchange="checar()">${opts(HORAS.filter(h => h > ini), fim)}</select></label></div>
+  <label>Motivo<input id="mm" maxlength="120" value="${esc(p.motivo || '')}" placeholder="Ex.: Aula de Algoritmos"></label>
+  <div id="disp" class="disp"></div></div>
+  <div class="bot"><button class="sec" onclick="$('#dlg').close()">Fechar</button><button id="mok" onclick='salvar(${J({ sala: p.sala, id: p.id || 0 })})'>${ed ? 'Salvar alteração' : 'Confirmar reserva'}</button></div>`;
+  $('#dlg').dataset.sala = p.sala; $('#dlg').dataset.ed = ed ? 1 : ''; $('#dlg').showModal(); checar();
+}
+async function checar() {
+  const d = $('#dlg'), box = $('#disp'); if (!val('md')) { box.className = 'disp'; box.textContent = 'Escolha a data.'; return; }
+  if (d.dataset.ed) { box.className = 'disp'; box.textContent = 'A disponibilidade será verificada ao salvar.'; return; }
+  try {
+    const livres = await api(`/salas?de=${val('md')}T${val('mi')}&ate=${val('md')}T${val('mf')}`);
+    const ok = livres.some(s => s.id == d.dataset.sala);
+    box.className = 'disp ' + (ok ? 'ok' : 'no'); box.textContent = ok ? '✓ Horário disponível' : '✕ Horário indisponível (reservado ou em manutenção)';
+  } catch {}
+}
+async function salvar(p) {
+  const b = { inicio: val('md') + 'T' + val('mi'), fim: val('md') + 'T' + val('mf'), motivo: val('mm') };
+  try {
+    const r = p.id ? await api('/reservas/' + p.id, 'PUT', b) : await api('/reservas', 'POST', { ...b, sala_id: p.sala });
+    $('#dlg').close(); aviso(r.status === 'pendente' ? 'Enviado: aguardando aprovação do responsável.' : 'Reserva confirmada!');
+    if (aba === 'reservas') vReservas();
+  } catch { checar(); }
+}
+/* ---- Reservas ---- */
+async function vReservas() {
+  const rs = await api('/reservas'); RES = Object.fromEntries(rs.map(r => [r.id, r]));
+  $('#v').innerHTML = rs.length ? `<div class="card tbl"><table><tr><th>Sala</th><th>Período</th><th>Solicitante</th><th>Status</th><th></th></tr>` +
+    rs.map(r => `<tr><td><strong>${esc(r.sala)}</strong><div class="mu">${esc(r.motivo)}</div></td><td>${periodo(r.inicio, r.fim)}</td><td>${esc(r.solicitante)}</td>
+    <td><span class="st ${r.status}">${r.status}</span></td><td style="white-space:nowrap">${['confirmada', 'pendente'].includes(r.status) && (r.usuario_id === me.id || me.perfil === 'admin') ?
+    `<button class="sec sm" onclick="editar(${r.id})">Alterar</button> <button class="sec sm" onclick="cancelar(${r.id})">Cancelar</button>` : ''}</td></tr>`).join('') + '</table></div>'
+    : '<div class="card vazio">Nenhuma reserva ainda. Vá em “Salas” para reservar.</div>';
+}
+function editar(id) { const r = RES[id]; abrir({ id, sala: r.sala_id, nome: r.sala, restrita: r.restrita, data: r.inicio.slice(0, 10), ini: r.inicio.slice(11), fim: r.fim.slice(11), motivo: r.motivo }); }
+async function cancelar(id) { const m = prompt('Motivo do cancelamento:'); if (!m) return; try { await api(`/reservas/${id}/cancelar`, 'POST', { motivo: m }); aviso('Reserva cancelada.'); vReservas(); } catch {} }
+async function vNotif() { const n = await api('/notificacoes'); $('#v').innerHTML = n.map(x => `<div class="card" style="margin-bottom:10px">${esc(x.mensagem)}<div class="mu">${fmt(x.data)}</div></div>`).join('') || '<div class="card vazio">Sem notificações.</div>'; }
+async function vAprov() {
+  const rs = (await api('/reservas')).filter(r => r.status === 'pendente');
+  $('#v').innerHTML = `<div class="grid">${rs.map(r => `<div class="card sala"><h3>${esc(r.sala)}</h3><span class="loc">${esc(r.solicitante)}</span><div>${periodo(r.inicio, r.fim)}</div><div class="mu">${esc(r.motivo)}</div>
+  <div class="acoes row"><button onclick="decidir(${r.id},true)">Aprovar</button><button class="sec" onclick="decidir(${r.id},false)">Recusar</button></div></div>`).join('')}</div>` + (rs.length ? '' : '<div class="card vazio">Nenhuma solicitação pendente.</div>');
+}
+async function decidir(id, aprovar) { const j = prompt('Justificativa:'); if (!j) return; try { await api(`/reservas/${id}/decisao`, 'POST', { aprovar, justificativa: j }); aviso('Decisão registrada.'); } catch {} vAprov(); }
+async function vRel() {
+  const r = await api('/relatorio');
+  $('#v').innerHTML = `<div class="card" style="margin-bottom:14px">Conflitos evitados: <strong>${r.conflitos_evitados}</strong> <span class="mu">(fórmula provisória)</span></div><div class="card tbl"><table><tr><th>Sala</th><th>Reservas confirmadas</th><th>Horas alocadas</th></tr>` +
+    r.utilizacao.map(u => `<tr><td>${esc(u.sala)}</td><td>${u.reservas}</td><td>${u.horas}</td></tr>`).join('') + '</table></div>';
+}
+async function vAdmin() {
+  const [salas, bl] = await Promise.all([api('/salas'), api('/bloqueios')]);
+  $('#v').innerHTML = `<div class="card filtro"><label>Nova sala<input id="ns"></label><label>Localização<input id="nl"></label>
+  <label style="flex-direction:row;align-items:center;gap:8px"><input id="nr" type="checkbox"> Exige aprovação</label><button onclick="novaSala()">Cadastrar</button></div>
+  <div class="card tbl" style="margin-bottom:18px"><table>${salas.map(s => `<tr><td><strong>${esc(s.nome)}</strong></td><td>${esc(s.localizacao)}</td><td><span class="st ${s.ativa ? 'confirmada' : 'cancelada'}">${s.ativa ? 'ativa' : 'desativada'}</span></td>
+  <td><button class="sec sm" onclick="ativa(${s.id},${s.ativa ? 0 : 1})">${s.ativa ? 'Desativar' : 'Ativar'}</button></td></tr>`).join('')}</table></div>
+  <h3>Bloqueios de manutenção</h3><div class="card filtro"><label>Sala<select id="bs">${salas.map(s => `<option value="${s.id}">${esc(s.nome)}</option>`).join('')}</select></label>
+  <label>Início<input id="bi" type="datetime-local"></label><label>Fim<input id="bf" type="datetime-local"></label><label>Motivo<input id="bm" value="manutenção"></label><button onclick="bloquear()">Bloquear</button></div>
+  <div class="card tbl"><table>${bl.map(b => `<tr><td>${esc(b.sala)}</td><td>${periodo(b.inicio, b.fim)}</td><td>${esc(b.motivo)}</td></tr>`).join('')}</table></div>`;
+}
+async function novaSala() { try { await api('/salas', 'POST', { nome: val('ns'), localizacao: val('nl'), restrita: $('#nr').checked }); aviso('Sala cadastrada.'); vAdmin(); } catch {} }
+async function ativa(id, a) { try { await api(`/salas/${id}/ativa`, 'POST', { ativa: a }); vAdmin(); } catch {} }
+async function bloquear() { try { await api('/bloqueios', 'POST', { sala_id: +val('bs'), inicio: val('bi'), fim: val('bf'), motivo: val('bm') }); aviso('Bloqueio registrado.'); vAdmin(); } catch {} }
+async function vAud() {
+  const a = await api('/auditoria');
+  $('#v').innerHTML = `<div class="card tbl"><table><tr><th>Data</th><th>Ator</th><th>Ação</th><th>Objeto</th><th>Dados</th></tr>` +
+    a.map(x => `<tr><td>${fmt(x.data)}</td><td>${esc(x.ator)}</td><td>${esc(x.acao)}</td><td>${esc(x.objeto)}</td><td class="mu">${esc(x.dados)}</td></tr>`).join('') + '</table></div>';
+}
+login();
+</script></body></html>
